@@ -37,6 +37,22 @@ servers:
         description: "Check CNSA 2.0 compliance"
         tags: ["security", "compliance", "cnsa"]
 
+      - name: scan_github_org
+        description: "Scan all repositories in a GitHub organization for vulnerabilities"
+        tags: ["security", "github", "organization"]
+
+      - name: scan_github_repo
+        description: "Scan a specific GitHub repository for vulnerabilities"
+        tags: ["security", "github", "repository"]
+
+      - name: list_github_repos
+        description: "List all repositories in a GitHub organization"
+        tags: ["github", "organization", "list"]
+
+      - name: scan_github_file
+        description: "Scan a specific file from a GitHub repository"
+        tags: ["security", "github", "file"]
+
     resources:
       - uri: "pqc://algorithms/all"
         name: "All Vulnerable Algorithms"

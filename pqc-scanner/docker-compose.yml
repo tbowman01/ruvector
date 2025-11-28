@@ -34,6 +34,8 @@ services:
     environment:
       - RUST_LOG=info
       - PORT=8001
+      # GitHub token for org scanning (optional, required for private repos)
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     ports:
       - "8001:8001"
     networks:

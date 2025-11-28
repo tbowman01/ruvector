@@ -180,6 +180,64 @@ pub struct ListAlgorithmsParams {
     pub include_alternatives: bool,
 }
 
+// ============== GitHub Tool Parameters ==============
+
+/// Parameters for scan_github_org tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanGitHubOrgParams {
+    /// GitHub organization name
+    pub org: String,
+    /// Maximum files to scan per repository (default: 50)
+    #[serde(default = "default_max_files")]
+    pub max_files_per_repo: usize,
+    /// Include private repositories (requires auth)
+    #[serde(default)]
+    pub include_private: bool,
+    /// Filter by programming language (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language_filter: Option<String>,
+}
+
+fn default_max_files() -> usize {
+    50
+}
+
+/// Parameters for scan_github_repo tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanGitHubRepoParams {
+    /// Repository in format "owner/repo"
+    pub repo: String,
+    /// Maximum files to scan (default: 100)
+    #[serde(default = "default_max_files_repo")]
+    pub max_files: usize,
+    /// Specific path to scan (optional, scans entire repo if not specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+fn default_max_files_repo() -> usize {
+    100
+}
+
+/// Parameters for list_github_repos tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListGitHubReposParams {
+    /// GitHub organization name
+    pub org: String,
+    /// Include archived repositories
+    #[serde(default)]
+    pub include_archived: bool,
+}
+
+/// Parameters for scan_github_file tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanGitHubFileParams {
+    /// Repository in format "owner/repo"
+    pub repo: String,
+    /// File path in repository
+    pub path: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

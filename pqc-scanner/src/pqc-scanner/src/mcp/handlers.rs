@@ -3,17 +3,19 @@
 //! Handles MCP protocol requests and dispatches to appropriate scanner functionality.
 
 use super::protocol::*;
+use crate::github::GitHubClient;
 use crate::patterns::{get_algorithms_by_risk, get_all_algorithms, RiskLevel};
 use crate::scanner::Scanner;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// MCP Handler for PQC Scanner
 pub struct McpHandler {
     scanner: Arc<RwLock<Scanner>>,
+    github_client: Arc<GitHubClient>,
 }
 
 impl Default for McpHandler {
@@ -24,8 +26,12 @@ impl Default for McpHandler {
 
 impl McpHandler {
     pub fn new() -> Self {
+        // Get GitHub token from environment
+        let github_token = std::env::var("GITHUB_TOKEN").ok();
+
         Self {
             scanner: Arc::new(RwLock::new(Scanner::new())),
+            github_client: Arc::new(GitHubClient::new(github_token)),
         }
     }
 
@@ -55,6 +61,12 @@ impl McpHandler {
 
     /// Handle initialize request
     async fn handle_initialize(&self, id: Option<Value>) -> McpResponse {
+        let github_auth = if self.github_client.is_authenticated() {
+            "authenticated"
+        } else {
+            "unauthenticated (set GITHUB_TOKEN for private repos)"
+        };
+
         McpResponse::success(
             id,
             json!({
@@ -67,7 +79,8 @@ impl McpHandler {
                 "serverInfo": {
                     "name": "pqc-scanner",
                     "version": env!("CARGO_PKG_VERSION"),
-                    "description": "Post-Quantum Cryptography vulnerability scanner"
+                    "description": "Post-Quantum Cryptography vulnerability scanner with GitHub organization support",
+                    "github_status": github_auth
                 }
             }),
         )
@@ -85,7 +98,8 @@ impl McpHandler {
 
     /// List available tools
     async fn handle_tools_list(&self, id: Option<Value>) -> McpResponse {
-        let tools = vec![
+        let mut tools = vec![
+            // Existing code scanning tools
             McpTool {
                 name: "scan_code".to_string(),
                 description: "Scan source code for quantum-vulnerable cryptographic algorithms. Returns vulnerabilities found with risk levels and PQC migration recommendations.".to_string(),
@@ -163,6 +177,95 @@ impl McpHandler {
                     "required": ["code"]
                 }),
             },
+            // GitHub organization scanning tools
+            McpTool {
+                name: "scan_github_org".to_string(),
+                description: "Scan all repositories in a GitHub organization for quantum-vulnerable cryptographic algorithms. Requires GITHUB_TOKEN for private repos.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "org": {
+                            "type": "string",
+                            "description": "GitHub organization name (e.g., 'microsoft', 'google')"
+                        },
+                        "max_files_per_repo": {
+                            "type": "integer",
+                            "description": "Maximum files to scan per repository",
+                            "default": 50
+                        },
+                        "include_private": {
+                            "type": "boolean",
+                            "description": "Include private repositories (requires authentication)",
+                            "default": false
+                        },
+                        "language_filter": {
+                            "type": "string",
+                            "description": "Only scan repos with this primary language"
+                        }
+                    },
+                    "required": ["org"]
+                }),
+            },
+            McpTool {
+                name: "scan_github_repo".to_string(),
+                description: "Scan a specific GitHub repository for quantum-vulnerable cryptographic algorithms.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "repo": {
+                            "type": "string",
+                            "description": "Repository in format 'owner/repo' (e.g., 'facebook/react')"
+                        },
+                        "max_files": {
+                            "type": "integer",
+                            "description": "Maximum files to scan",
+                            "default": 100
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Specific path to scan (optional, scans entire repo if not specified)"
+                        }
+                    },
+                    "required": ["repo"]
+                }),
+            },
+            McpTool {
+                name: "list_github_repos".to_string(),
+                description: "List all repositories in a GitHub organization with their languages and sizes.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "org": {
+                            "type": "string",
+                            "description": "GitHub organization name"
+                        },
+                        "include_archived": {
+                            "type": "boolean",
+                            "description": "Include archived repositories",
+                            "default": false
+                        }
+                    },
+                    "required": ["org"]
+                }),
+            },
+            McpTool {
+                name: "scan_github_file".to_string(),
+                description: "Scan a specific file from a GitHub repository for quantum-vulnerable cryptographic algorithms.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "repo": {
+                            "type": "string",
+                            "description": "Repository in format 'owner/repo'"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "File path in the repository (e.g., 'src/crypto/keys.py')"
+                        }
+                    },
+                    "required": ["repo", "path"]
+                }),
+            },
         ];
 
         McpResponse::success(id, json!({ "tools": tools }))
@@ -184,10 +287,16 @@ impl McpHandler {
         let arguments = &params["arguments"];
 
         let result = match tool_name {
+            // Existing tools
             "scan_code" => self.tool_scan_code(arguments).await,
             "get_recommendations" => self.tool_get_recommendations(arguments).await,
             "list_algorithms" => self.tool_list_algorithms(arguments).await,
             "check_compliance" => self.tool_check_compliance(arguments).await,
+            // GitHub tools
+            "scan_github_org" => self.tool_scan_github_org(arguments).await,
+            "scan_github_repo" => self.tool_scan_github_repo(arguments).await,
+            "list_github_repos" => self.tool_list_github_repos(arguments).await,
+            "scan_github_file" => self.tool_scan_github_file(arguments).await,
             _ => Err(anyhow::anyhow!("Unknown tool: {}", tool_name)),
         };
 
@@ -385,6 +494,262 @@ impl McpHandler {
         Ok(output)
     }
 
+    // ==================== GitHub Tools ====================
+
+    /// Scan all repositories in a GitHub organization
+    async fn tool_scan_github_org(&self, args: &Value) -> Result<String> {
+        let params: ScanGitHubOrgParams =
+            serde_json::from_value(args.clone()).context("Invalid parameters for scan_github_org")?;
+
+        info!("Starting scan of GitHub organization: {}", params.org);
+
+        // Get organization info
+        let org_info = self.github_client.get_organization(&params.org).await?;
+
+        let mut output = String::new();
+        output.push_str(&format!("# PQC Vulnerability Scan: {}\n\n", params.org));
+        output.push_str(&format!("**Organization:** {}\n", org_info.login));
+        if let Some(desc) = &org_info.description {
+            output.push_str(&format!("**Description:** {}\n", desc));
+        }
+        output.push_str(&format!("**Public Repos:** {}\n\n", org_info.public_repos));
+
+        // Scan all repositories
+        let scan_targets = self.github_client
+            .scan_organization(&params.org, params.max_files_per_repo)
+            .await?;
+
+        if scan_targets.is_empty() {
+            output.push_str("No scannable files found in the organization.\n");
+            return Ok(output);
+        }
+
+        output.push_str(&format!("**Files Scanned:** {}\n\n", scan_targets.len()));
+        output.push_str("---\n\n");
+
+        // Scan each file and aggregate results
+        let scanner = Scanner::new();
+        let mut total_critical = 0;
+        let mut total_high = 0;
+        let mut total_medium = 0;
+        let mut total_low = 0;
+        let mut repo_results: std::collections::HashMap<String, Vec<(String, crate::scanner::ScanResult)>> =
+            std::collections::HashMap::new();
+
+        for target in &scan_targets {
+            let result = if let Some(ref lang) = target.language {
+                Scanner::new().with_language_hint(lang).scan(&target.content)
+            } else {
+                scanner.scan(&target.content)
+            };
+
+            if result.summary.total > 0 {
+                total_critical += result.summary.critical;
+                total_high += result.summary.high;
+                total_medium += result.summary.medium;
+                total_low += result.summary.low;
+
+                repo_results
+                    .entry(target.repo.clone())
+                    .or_default()
+                    .push((target.path.clone(), result));
+            }
+        }
+
+        // Summary
+        output.push_str("## Summary\n\n");
+        let total_vulns = total_critical + total_high + total_medium + total_low;
+
+        if total_vulns == 0 {
+            output.push_str("✅ **No quantum-vulnerable cryptographic algorithms detected!**\n\n");
+        } else {
+            output.push_str(&format!("⚠️ **Found {} vulnerabilities across {} repositories:**\n\n",
+                total_vulns, repo_results.len()));
+            output.push_str(&format!("| Risk Level | Count |\n"));
+            output.push_str(&format!("|------------|-------|\n"));
+            output.push_str(&format!("| CRITICAL | {} |\n", total_critical));
+            output.push_str(&format!("| HIGH | {} |\n", total_high));
+            output.push_str(&format!("| MEDIUM | {} |\n", total_medium));
+            output.push_str(&format!("| LOW | {} |\n\n", total_low));
+        }
+
+        // Detailed findings by repository
+        if !repo_results.is_empty() {
+            output.push_str("## Detailed Findings by Repository\n\n");
+
+            for (repo, files) in &repo_results {
+                output.push_str(&format!("### {}\n\n", repo));
+
+                for (path, result) in files {
+                    output.push_str(&format!("**{}**\n", path));
+                    for vuln in &result.vulnerabilities {
+                        output.push_str(&format!(
+                            "- Line {}: {} [{}]\n",
+                            vuln.line_number, vuln.algorithm, vuln.risk_level
+                        ));
+                    }
+                    output.push('\n');
+                }
+            }
+        }
+
+        // Compliance summary
+        output.push_str("## CNSA 2.0 Compliance\n\n");
+        if total_critical == 0 && total_high == 0 {
+            output.push_str("✅ Organization is CNSA 2.0 compliant (no critical/high vulnerabilities)\n");
+        } else {
+            output.push_str("❌ Organization is NOT CNSA 2.0 compliant\n\n");
+            output.push_str("**Required Actions:**\n");
+            output.push_str("1. Migrate all RSA/ECDSA usage to ML-KEM/ML-DSA\n");
+            output.push_str("2. Replace MD5/SHA-1 with SHA-256 or SHA-3\n");
+            output.push_str("3. Upgrade DES/3DES to AES-256\n");
+        }
+
+        Ok(output)
+    }
+
+    /// Scan a specific GitHub repository
+    async fn tool_scan_github_repo(&self, args: &Value) -> Result<String> {
+        let params: ScanGitHubRepoParams =
+            serde_json::from_value(args.clone()).context("Invalid parameters for scan_github_repo")?;
+
+        let parts: Vec<&str> = params.repo.split('/').collect();
+        if parts.len() != 2 {
+            return Err(anyhow::anyhow!("Invalid repo format. Use 'owner/repo'"));
+        }
+        let (owner, repo_name) = (parts[0], parts[1]);
+
+        info!("Scanning repository: {}", params.repo);
+
+        // Get repository info
+        let repo_info = self.github_client.get_repository(owner, repo_name).await?;
+
+        let mut output = String::new();
+        output.push_str(&format!("# PQC Vulnerability Scan: {}\n\n", params.repo));
+        output.push_str(&format!("**Repository:** {}\n", repo_info.full_name));
+        if let Some(desc) = &repo_info.description {
+            output.push_str(&format!("**Description:** {}\n", desc));
+        }
+        if let Some(lang) = &repo_info.language {
+            output.push_str(&format!("**Primary Language:** {}\n", lang));
+        }
+        output.push_str(&format!("**Default Branch:** {}\n\n", repo_info.default_branch));
+
+        // Find and scan files
+        let files = self.github_client
+            .find_scannable_files(owner, repo_name, params.max_files)
+            .await?;
+
+        output.push_str(&format!("**Scannable Files Found:** {}\n\n", files.len()));
+        output.push_str("---\n\n");
+
+        let scanner = Scanner::new();
+        let mut total_vulns = 0;
+        let mut all_results = Vec::new();
+
+        for file in &files {
+            match self.github_client.get_file_content(owner, repo_name, &file.path).await {
+                Ok(content) => {
+                    let result = scanner.scan(&content);
+                    if result.summary.total > 0 {
+                        total_vulns += result.summary.total;
+                        all_results.push((file.path.clone(), result));
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to fetch {}: {}", file.path, e);
+                }
+            }
+        }
+
+        if all_results.is_empty() {
+            output.push_str("✅ **No quantum-vulnerable cryptographic algorithms detected!**\n");
+        } else {
+            output.push_str(&format!("⚠️ **Found {} vulnerabilities in {} files:**\n\n",
+                total_vulns, all_results.len()));
+
+            for (path, result) in &all_results {
+                output.push_str(&format!("### {}\n\n", path));
+                output.push_str(&format!("| Line | Algorithm | Risk | Context |\n"));
+                output.push_str(&format!("|------|-----------|------|--------|\n"));
+
+                for vuln in &result.vulnerabilities {
+                    output.push_str(&format!(
+                        "| {} | {} | {} | {} |\n",
+                        vuln.line_number, vuln.algorithm, vuln.risk_level, vuln.context
+                    ));
+                }
+                output.push('\n');
+            }
+        }
+
+        Ok(output)
+    }
+
+    /// List repositories in a GitHub organization
+    async fn tool_list_github_repos(&self, args: &Value) -> Result<String> {
+        let params: ListGitHubReposParams =
+            serde_json::from_value(args.clone()).context("Invalid parameters for list_github_repos")?;
+
+        info!("Listing repositories for organization: {}", params.org);
+
+        let repos = self.github_client.list_org_repos(&params.org).await?;
+
+        let mut output = String::new();
+        output.push_str(&format!("# Repositories in {}\n\n", params.org));
+        output.push_str(&format!("**Total:** {} repositories\n\n", repos.len()));
+
+        output.push_str("| Repository | Language | Size (KB) | Private | Description |\n");
+        output.push_str("|------------|----------|-----------|---------|-------------|\n");
+
+        for repo in &repos {
+            if !params.include_archived && repo.archived {
+                continue;
+            }
+
+            let lang = repo.language.as_deref().unwrap_or("-");
+            let desc = repo.description.as_deref().unwrap_or("-")
+                .chars().take(50).collect::<String>();
+            let private = if repo.private { "Yes" } else { "No" };
+
+            output.push_str(&format!(
+                "| {} | {} | {} | {} | {} |\n",
+                repo.name, lang, repo.size, private, desc
+            ));
+        }
+
+        Ok(output)
+    }
+
+    /// Scan a specific file from a GitHub repository
+    async fn tool_scan_github_file(&self, args: &Value) -> Result<String> {
+        let params: ScanGitHubFileParams =
+            serde_json::from_value(args.clone()).context("Invalid parameters for scan_github_file")?;
+
+        let parts: Vec<&str> = params.repo.split('/').collect();
+        if parts.len() != 2 {
+            return Err(anyhow::anyhow!("Invalid repo format. Use 'owner/repo'"));
+        }
+        let (owner, repo_name) = (parts[0], parts[1]);
+
+        info!("Scanning file: {} in {}", params.path, params.repo);
+
+        let content = self.github_client
+            .get_file_content(owner, repo_name, &params.path)
+            .await?;
+
+        let scanner = Scanner::new();
+        let result = scanner.scan(&content);
+
+        let mut output = String::new();
+        output.push_str(&format!("# PQC Scan: {}/{}\n\n", params.repo, params.path));
+
+        let report = Scanner::format_report(&result);
+        output.push_str(&report);
+
+        Ok(output)
+    }
+
     /// List available resources
     async fn handle_resources_list(&self, id: Option<Value>) -> McpResponse {
         McpResponse::success(
@@ -485,6 +850,17 @@ impl McpHandler {
                                 "required": true
                             }
                         ]
+                    },
+                    {
+                        "name": "scan-github-org",
+                        "description": "Scan all repositories in a GitHub organization",
+                        "arguments": [
+                            {
+                                "name": "org",
+                                "description": "GitHub organization name",
+                                "required": true
+                            }
+                        ]
                     }
                 ]
             }),
@@ -519,6 +895,18 @@ impl McpHandler {
                         "content": {
                             "type": "text",
                             "text": "Please provide a detailed migration guide for replacing {{algorithm}} with post-quantum alternatives."
+                        }
+                    }
+                ]
+            }),
+            "scan-github-org" => json!({
+                "description": "Scan all repositories in a GitHub organization",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": {
+                            "type": "text",
+                            "text": "Please scan all repositories in the {{org}} GitHub organization for quantum-vulnerable cryptographic algorithms and provide a comprehensive report."
                         }
                     }
                 ]
@@ -565,7 +953,18 @@ mod tests {
 
         let result = response.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert!(!tools.is_empty());
+
+        // Should have original tools plus GitHub tools
+        assert!(tools.len() >= 8);
+
+        // Check for GitHub tools
+        let tool_names: Vec<&str> = tools.iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert!(tool_names.contains(&"scan_github_org"));
+        assert!(tool_names.contains(&"scan_github_repo"));
+        assert!(tool_names.contains(&"list_github_repos"));
+        assert!(tool_names.contains(&"scan_github_file"));
     }
 
     #[tokio::test]
