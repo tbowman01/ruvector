@@ -4,12 +4,12 @@
 # ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
 # │   Open WebUI    │────▶│  MCP Context Forge   │────▶│   PQC Scanner   │
 # │   (Chat UI)     │     │     (Gateway)        │     │   (MCP Server)  │
-# │   Port 3000     │     │     Port 4444        │     │   Port 8001     │
+# │   Port 3001     │     │     Port 4444        │     │   Port 8001     │
 # └─────────────────┘     └──────────────────────┘     └─────────────────┘
 #
 # Usage:
 #   docker-compose up -d
-#   Open http://localhost:3000
+#   Open http://localhost:3001
 
 services:
   # =============================================================================
@@ -80,7 +80,7 @@ services:
     environment:
       # General settings
       - WEBUI_NAME=PQC Scanner
-      - WEBUI_URL=http://localhost:3000
+      - WEBUI_URL=http://localhost:3001
 
       # MCP Configuration
       - MCP_ENABLED=true
@@ -98,7 +98,7 @@ services:
       # Data persistence
       - DATA_DIR=/app/backend/data
     ports:
-      - "3000:8080"
+      - "3001:8080"  # Changed from 3000 to avoid conflict with existing services
     volumes:
       - open-webui-data:/app/backend/data
       - ./config/open-webui:/app/config:ro
