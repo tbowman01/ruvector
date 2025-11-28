@@ -6,6 +6,13 @@
 # │   (Chat UI)     │     │     (Gateway)        │     │   (MCP Server)  │
 # │   Port 8081     │     │     Port 4444        │     │   Port 8001     │
 # └─────────────────┘     └──────────────────────┘     └─────────────────┘
+#                                    │
+#                                    ▼
+#                         ┌─────────────────────┐
+#                         │   Docling MCP       │
+#                         │   (Document Parser) │
+#                         │   Port 8002         │
+#                         └─────────────────────┘
 #
 # Usage:
 #   docker-compose up -d
@@ -39,6 +46,40 @@ services:
       start_period: 10s
 
   # =============================================================================
+  # Docling MCP Server
+  # =============================================================================
+  # Document processing and conversion (PDF, DOCX, PPTX, etc.)
+  # https://github.com/docling-project/docling-mcp
+  docling:
+    image: python:3.11-slim
+    container_name: docling-mcp
+    hostname: docling
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      bash -c "
+        pip install --no-cache-dir docling-mcp uvicorn httpx &&
+        python -m docling_mcp.server --host 0.0.0.0 --port 8002
+      "
+    environment:
+      - DOCLING_PORT=8002
+      - DOCLING_CACHE_DIR=/app/cache
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8002:8002"
+    volumes:
+      - docling-cache:/app/cache
+      - ./uploads:/app/uploads:ro
+    networks:
+      - pqc-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # =============================================================================
   # MCP Context Forge Gateway
   # =============================================================================
   # Routes MCP requests from Open WebUI to backend MCP servers
@@ -59,6 +100,8 @@ services:
       - pqc-network
     depends_on:
       pqc-scanner:
+        condition: service_healthy
+      docling:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4444/health"]
@@ -145,5 +188,7 @@ networks:
 volumes:
   open-webui-data:
     name: pqc-scanner-webui-data
+  docling-cache:
+    name: pqc-scanner-docling-cache
   # ollama-data:
   #   name: pqc-scanner-ollama-data

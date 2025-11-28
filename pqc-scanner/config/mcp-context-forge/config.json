@@ -23,6 +23,28 @@
         "maxAttempts": 3,
         "backoffMs": 1000
       }
+    },
+    {
+      "name": "docling",
+      "displayName": "Docling Document Processor",
+      "description": "Convert and process documents (PDF, DOCX, PPTX, images) to extract text and tables",
+      "url": "http://docling:8002/mcp",
+      "transport": "http",
+      "capabilities": {
+        "tools": true,
+        "resources": true,
+        "prompts": false
+      },
+      "healthCheck": {
+        "enabled": true,
+        "endpoint": "http://docling:8002/health",
+        "interval": 30000,
+        "timeout": 10000
+      },
+      "retries": {
+        "maxAttempts": 3,
+        "backoffMs": 2000
+      }
     }
   ],
   "routing": {
@@ -31,7 +53,14 @@
       "scan_code": "pqc-scanner",
       "get_recommendations": "pqc-scanner",
       "list_algorithms": "pqc-scanner",
-      "check_compliance": "pqc-scanner"
+      "check_compliance": "pqc-scanner",
+      "convert_document": "docling",
+      "convert_document_from_url": "docling",
+      "list_converted_documents": "docling",
+      "get_document_content": "docling",
+      "extract_tables": "docling",
+      "extract_images": "docling",
+      "batch_convert": "docling"
     }
   },
   "logging": {
@@ -40,7 +69,7 @@
   },
   "cors": {
     "enabled": true,
-    "origins": ["http://localhost:3000", "http://open-webui:8080"],
+    "origins": ["http://localhost:8081", "http://open-webui:8080"],
     "methods": ["GET", "POST", "OPTIONS"],
     "headers": ["Content-Type", "Authorization"]
   }

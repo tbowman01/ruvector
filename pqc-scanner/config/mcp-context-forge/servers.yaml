@@ -56,10 +56,66 @@ servers:
       maxAttempts: 3
       backoffMs: 1000
 
+  - name: docling
+    displayName: "Docling Document Processor"
+    description: |
+      Document processing and conversion powered by IBM Docling.
+
+      Supported formats: PDF, DOCX, PPTX, XLSX, HTML, images (PNG, JPEG, TIFF)
+
+      Features: Text extraction, table detection, image extraction, OCR support
+
+    url: http://docling:8002/mcp
+    transport: http
+
+    capabilities:
+      tools: true
+      resources: true
+      prompts: false
+
+    tools:
+      - name: convert_document
+        description: "Convert a document file to markdown format"
+        tags: ["document", "conversion", "pdf"]
+
+      - name: convert_document_from_url
+        description: "Convert a document from URL to markdown"
+        tags: ["document", "conversion", "url"]
+
+      - name: list_converted_documents
+        description: "List all converted documents in cache"
+        tags: ["document", "cache"]
+
+      - name: get_document_content
+        description: "Get the content of a converted document"
+        tags: ["document", "content"]
+
+      - name: extract_tables
+        description: "Extract tables from a document"
+        tags: ["document", "tables", "extraction"]
+
+      - name: extract_images
+        description: "Extract images from a document"
+        tags: ["document", "images", "extraction"]
+
+      - name: batch_convert
+        description: "Convert multiple documents in batch"
+        tags: ["document", "batch", "conversion"]
+
+    healthCheck:
+      enabled: true
+      endpoint: http://docling:8002/health
+      interval: 30000
+      timeout: 10000
+
+    retries:
+      maxAttempts: 3
+      backoffMs: 2000
+
 # Global settings
 settings:
   defaultServer: pqc-scanner
-  requestTimeout: 30000
+  requestTimeout: 60000
 
 logging:
   level: info
@@ -68,5 +124,5 @@ logging:
 cors:
   enabled: true
   origins:
-    - "http://localhost:3000"
+    - "http://localhost:8081"
     - "http://open-webui:8080"
