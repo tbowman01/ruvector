@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/IBM/mcp-context-forge/main/config.schema.json",
+  "version": "1.0",
+  "servers": [
+    {
+      "name": "pqc-scanner",
+      "displayName": "PQC Vulnerability Scanner",
+      "description": "Scan code for quantum-vulnerable cryptographic algorithms",
+      "url": "http://pqc-scanner:8001/mcp",
+      "transport": "http",
+      "capabilities": {
+        "tools": true,
+        "resources": true,
+        "prompts": true
+      },
+      "healthCheck": {
+        "enabled": true,
+        "endpoint": "http://pqc-scanner:8001/health",
+        "interval": 30000,
+        "timeout": 5000
+      },
+      "retries": {
+        "maxAttempts": 3,
+        "backoffMs": 1000
+      }
+    }
+  ],
+  "routing": {
+    "defaultServer": "pqc-scanner",
+    "toolRoutes": {
+      "scan_code": "pqc-scanner",
+      "get_recommendations": "pqc-scanner",
+      "list_algorithms": "pqc-scanner",
+      "check_compliance": "pqc-scanner"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json"
+  },
+  "cors": {
+    "enabled": true,
+    "origins": ["http://localhost:3000", "http://open-webui:8080"],
+    "methods": ["GET", "POST", "OPTIONS"],
+    "headers": ["Content-Type", "Authorization"]
+  }
+}

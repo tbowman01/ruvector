@@ -1,0 +1,151 @@
+# Open WebUI PQC Scanner - Docker Compose Configuration
+#
+# Architecture:
+# ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+# │   Open WebUI    │────▶│  MCP Context Forge   │────▶│   PQC Scanner   │
+# │   (Chat UI)     │     │     (Gateway)        │     │   (MCP Server)  │
+# │   Port 3000     │     │     Port 4444        │     │   Port 8001     │
+# └─────────────────┘     └──────────────────────┘     └─────────────────┘
+#
+# Usage:
+#   docker-compose up -d
+#   Open http://localhost:3000
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # PQC Scanner MCP Server
+  # =============================================================================
+  # Post-Quantum Cryptography vulnerability scanner
+  # Detects quantum-vulnerable algorithms and provides migration recommendations
+  pqc-scanner:
+    build:
+      context: ./src/pqc-scanner
+      dockerfile: Dockerfile
+    container_name: pqc-scanner
+    hostname: pqc-scanner
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+      - PORT=8001
+    ports:
+      - "8001:8001"
+    networks:
+      - pqc-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # MCP Context Forge Gateway
+  # =============================================================================
+  # Routes MCP requests from Open WebUI to backend MCP servers
+  # https://github.com/IBM/mcp-context-forge
+  mcp-context-forge:
+    image: ghcr.io/ibm/mcp-context-forge:latest
+    container_name: mcp-context-forge
+    hostname: mcp-context-forge
+    restart: unless-stopped
+    environment:
+      - PORT=4444
+      - LOG_LEVEL=info
+    ports:
+      - "4444:4444"
+    volumes:
+      - ./config/mcp-context-forge:/app/config:ro
+    networks:
+      - pqc-network
+    depends_on:
+      pqc-scanner:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4444/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # =============================================================================
+  # Open WebUI - Chat Interface
+  # =============================================================================
+  # Open-source ChatGPT-style interface
+  # https://github.com/open-webui/open-webui
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    hostname: open-webui
+    restart: unless-stopped
+    environment:
+      # General settings
+      - WEBUI_NAME=PQC Scanner
+      - WEBUI_URL=http://localhost:3000
+
+      # MCP Configuration
+      - MCP_ENABLED=true
+      - MCP_SERVER_URL=http://mcp-context-forge:4444
+
+      # Ollama backend (optional - for local LLM)
+      - OLLAMA_BASE_URL=http://ollama:11434
+
+      # OpenAI API (optional - configure if using OpenAI)
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Authentication (disabled for local development)
+      - WEBUI_AUTH=false
+
+      # Data persistence
+      - DATA_DIR=/app/backend/data
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+      - ./config/open-webui:/app/config:ro
+    networks:
+      - pqc-network
+    depends_on:
+      mcp-context-forge:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
+  # Ollama - Local LLM (Optional)
+  # =============================================================================
+  # Uncomment to run local LLMs without external API
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   hostname: ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - pqc-network
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+networks:
+  pqc-network:
+    driver: bridge
+    name: pqc-scanner-network
+
+volumes:
+  open-webui-data:
+    name: pqc-scanner-webui-data
+  # ollama-data:
+  #   name: pqc-scanner-ollama-data

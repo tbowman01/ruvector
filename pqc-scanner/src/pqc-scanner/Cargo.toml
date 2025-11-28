@@ -1,0 +1,47 @@
+[package]
+name = "pqc-scanner"
+version = "0.1.0"
+edition = "2021"
+description = "Post-Quantum Cryptography vulnerability scanner MCP server"
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Web server
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Regex for pattern matching
+regex = "1.10"
+lazy_static = "1.4"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# UUID for request IDs
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Tree-sitter for multi-language parsing (optional advanced feature)
+# tree-sitter = "0.20"
+# tree-sitter-python = "0.20"
+# tree-sitter-javascript = "0.20"
+
+[dev-dependencies]
+tokio-test = "0.4"
+pretty_assertions = "1.4"
+
+[[bin]]
+name = "pqc-scanner"
+path = "src/main.rs"

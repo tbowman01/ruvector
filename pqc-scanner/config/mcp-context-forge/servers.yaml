@@ -1,0 +1,72 @@
+# MCP Context Forge Server Configuration
+# Alternative YAML format for server registration
+
+servers:
+  - name: pqc-scanner
+    displayName: "PQC Vulnerability Scanner"
+    description: |
+      Post-Quantum Cryptography vulnerability scanner for detecting
+      quantum-vulnerable cryptographic algorithms in source code.
+
+      Supported languages: Python, JavaScript, Java, Go, Rust
+
+      Detects: RSA, ECDSA, DH, DSA, MD5, SHA-1, DES, 3DES, RC4, Blowfish
+
+    url: http://pqc-scanner:8001/mcp
+    transport: http
+
+    capabilities:
+      tools: true
+      resources: true
+      prompts: true
+
+    tools:
+      - name: scan_code
+        description: "Scan source code for quantum-vulnerable cryptographic algorithms"
+        tags: ["security", "crypto", "pqc"]
+
+      - name: get_recommendations
+        description: "Get PQC migration recommendations for a specific algorithm"
+        tags: ["security", "crypto", "migration"]
+
+      - name: list_algorithms
+        description: "List all detectable vulnerable algorithms"
+        tags: ["security", "crypto", "reference"]
+
+      - name: check_compliance
+        description: "Check CNSA 2.0 compliance"
+        tags: ["security", "compliance", "cnsa"]
+
+    resources:
+      - uri: "pqc://algorithms/all"
+        name: "All Vulnerable Algorithms"
+        mimeType: "application/json"
+
+      - uri: "pqc://nist/standards"
+        name: "NIST PQC Standards"
+        mimeType: "application/json"
+
+    healthCheck:
+      enabled: true
+      endpoint: http://pqc-scanner:8001/health
+      interval: 30000
+      timeout: 5000
+
+    retries:
+      maxAttempts: 3
+      backoffMs: 1000
+
+# Global settings
+settings:
+  defaultServer: pqc-scanner
+  requestTimeout: 30000
+
+logging:
+  level: info
+  format: json
+
+cors:
+  enabled: true
+  origins:
+    - "http://localhost:3000"
+    - "http://open-webui:8080"
