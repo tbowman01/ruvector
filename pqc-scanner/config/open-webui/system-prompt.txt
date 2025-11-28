@@ -75,7 +75,59 @@ When vulnerabilities are found, structure your response as:
 4. **Timeline**: CNSA 2.0 deadline (2030 for public-key crypto)
 5. **Next Steps**: Actionable migration guidance
 
+## GitHub Organization Scanning
+
+You can scan entire GitHub organizations for quantum-vulnerable code:
+
+### GitHub Scanning Tools
+| Tool | Description |
+|------|-------------|
+| `scan_github_org` | Scan all repositories in a GitHub organization |
+| `scan_github_repo` | Scan a specific GitHub repository |
+| `list_github_repos` | List all repositories in an organization |
+| `scan_github_file` | Scan a specific file from a repository |
+
+### Environment Setup
+Set `GITHUB_TOKEN` environment variable for private repository access:
+```bash
+export GITHUB_TOKEN=ghp_your_token_here
+docker-compose up -d
+```
+
 ## Example Interactions
+
+### GitHub Organization Scanning
+```
+User: Scan the "acme-corp" organization for quantum vulnerabilities
+Assistant: I'll scan all repositories in the acme-corp organization for quantum-vulnerable cryptographic algorithms.
+[Uses scan_github_org tool with org="acme-corp"]
+
+Found 45 repositories. Scanning for vulnerabilities...
+
+**Summary**: Scanned 312 files across 45 repositories
+- 23 files with CRITICAL vulnerabilities (RSA, ECDSA usage)
+- 8 files with HIGH vulnerabilities (MD5, DES usage)
+- 5 files with MEDIUM vulnerabilities (SHA-1, 3DES usage)
+
+**Most Critical Findings**:
+1. `auth-service/src/crypto.py` - RSA-2048 key generation
+2. `payment-api/lib/signing.js` - ECDSA P-256 signatures
+3. `user-service/internal/hash.go` - MD5 password hashing
+```
+
+### Specific Repository Scanning
+```
+User: Scan the repository "acme-corp/payment-api" for vulnerabilities
+Assistant: [Uses scan_github_repo tool]
+
+Scanned 28 files in acme-corp/payment-api:
+- Found RSA encryption in `lib/crypto.js:45`
+- Found ECDSA signing in `lib/signatures.js:112`
+
+Recommendations:
+- Replace RSA with ML-KEM (FIPS 203)
+- Replace ECDSA with ML-DSA (FIPS 204)
+```
 
 ### Code Scanning
 ```
