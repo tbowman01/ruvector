@@ -34,20 +34,7 @@ Think of it as: **Pinecone + Neo4j + PyTorch + etcd** in one Rust package.
 ## Quick Start
 
 ### One-Line Install
-
-```bash
-# Install everything (Rust + npm)
-curl -fsSL https://raw.githubusercontent.com/ruvnet/ruvector/main/install.sh | bash
-
-# Rust only
-curl -fsSL https://raw.githubusercontent.com/ruvnet/ruvector/main/install.sh | bash -s -- --rust-only
-
-# npm only
-curl -fsSL https://raw.githubusercontent.com/ruvnet/ruvector/main/install.sh | bash -s -- --npm-only
-
-# List available packages
-curl -fsSL https://raw.githubusercontent.com/ruvnet/ruvector/main/install.sh | bash -s -- --list
-```
+ 
 
 ### Node.js / Browser
 
@@ -57,53 +44,6 @@ npm install ruvector
 
 # Or try instantly
 npx ruvector
-```
-
-```javascript
-const ruvector = require('ruvector');
-
-// Vector search
-const db = new ruvector.VectorDB(128);
-db.insert('doc1', embedding1);
-const results = db.search(queryEmbedding, 10);
-
-// Graph queries (Cypher)
-db.execute("CREATE (a:Person {name: 'Alice'})-[:KNOWS]->(b:Person {name: 'Bob'})");
-db.execute("MATCH (p:Person)-[:KNOWS]->(friend) RETURN friend.name");
-
-// GNN-enhanced search
-const layer = new ruvector.GNNLayer(128, 256, 4);
-const enhanced = layer.forward(query, neighbors, weights);
-
-// Compression (2-32x memory savings)
-const compressed = ruvector.compress(embedding, 0.3);
-
-// Tiny Dancer: AI agent routing
-const router = new ruvector.Router();
-const decision = router.route(candidates, { optimize: 'cost' });
-```
-
-### Rust
-
-```bash
-cargo add ruvector-graph ruvector-gnn
-```
-
-```rust
-use ruvector_graph::{GraphDB, NodeBuilder};
-use ruvector_gnn::{RuvectorLayer, differentiable_search};
-
-let db = GraphDB::new();
-
-let doc = NodeBuilder::new("doc1")
-    .label("Document")
-    .property("embedding", vec![0.1, 0.2, 0.3])
-    .build();
-db.create_node(doc)?;
-
-// GNN layer
-let layer = RuvectorLayer::new(128, 256, 4, 0.1);
-let enhanced = layer.forward(&query, &neighbors, &weights);
 ```
 
 ## Features
@@ -133,30 +73,6 @@ let enhanced = layer.forward(&query, &neighbors, &weights);
 cargo add ruvector-raft ruvector-cluster ruvector-replication
 ```
 
-```rust
-use ruvector_raft::{RaftNode, RaftNodeConfig};
-use ruvector_cluster::{ClusterManager, ConsistentHashRing};
-use ruvector_replication::{SyncManager, SyncMode};
-
-// Configure a 5-node Raft cluster
-let config = RaftNodeConfig {
-    node_id: "node-1".into(),
-    cluster_members: vec!["node-1", "node-2", "node-3", "node-4", "node-5"]
-        .into_iter().map(Into::into).collect(),
-    election_timeout_min: 150,  // ms
-    election_timeout_max: 300,  // ms
-    heartbeat_interval: 50,     // ms
-};
-let raft = RaftNode::new(config);
-
-// Auto-sharding with consistent hashing (150 virtual nodes per real node)
-let ring = ConsistentHashRing::new(64, 3); // 64 shards, replication factor 3
-let shard = ring.get_shard("my-vector-key");
-
-// Multi-master replication with conflict resolution
-let sync = SyncManager::new(SyncMode::SemiSync { min_replicas: 2 });
-```
-
 ### AI & ML
 
 | Feature | What It Does | Why It Matters |
@@ -166,6 +82,90 @@ let sync = SyncManager::new(SyncMode::SemiSync { min_replicas: 2 });
 | **Semantic Router** | Route queries to optimal endpoints | Multi-model AI orchestration |
 | **Tiny Dancer** | FastGRNN neural inference | Optimize LLM inference costs |
 | **Adaptive Routing** | Learn optimal routing strategies | Minimize latency, maximize accuracy |
+
+### Attention Mechanisms (`@ruvector/attention`)
+
+High-performance attention mechanisms for transformers, graph neural networks, and hyperbolic embeddings. Native Rust with NAPI-RS bindings for maximum performance.
+
+> **Documentation**: [Attention Module Docs](./npm/packages/ruvector-attention/README.md) | [API Reference](./crates/ruvector-attention/README.md)
+
+#### Core Attention Mechanisms
+
+| Mechanism | Complexity | Memory | Best For |
+|-----------|------------|--------|----------|
+| **DotProductAttention** | O(n²) | O(n²) | Standard transformer attention, general purpose |
+| **MultiHeadAttention** | O(n²·h) | O(n²·h) | Transformers, parallel attention heads, BERT/GPT |
+| **FlashAttention** | O(n²) | O(n) | Long sequences, memory-constrained environments |
+| **LinearAttention** | O(n·d) | O(n·d) | Very long sequences (>8K tokens), streaming |
+| **HyperbolicAttention** | O(n²) | O(n²) | Hierarchical data, taxonomies, tree structures |
+| **MoEAttention** | O(n·k) | O(n·k) | Mixture of Experts, sparse routing, large models |
+
+#### Graph Attention Mechanisms
+
+| Mechanism | Complexity | Best For |
+|-----------|------------|----------|
+| **GraphRoPeAttention** | O(n²) | Graph transformers with rotary position embeddings |
+| **EdgeFeaturedAttention** | O(n²·e) | Molecular graphs, knowledge graphs with edge attributes |
+| **DualSpaceAttention** | O(n²) | Combined Euclidean + hyperbolic embeddings |
+| **LocalGlobalAttention** | O(n·k + n) | Large-scale graphs (>100K nodes), scalable GNNs |
+
+#### Specialized Mechanisms
+
+| Mechanism | Type | Best For |
+|-----------|------|----------|
+| **SparseAttention** | Efficiency | Very long documents, memory-limited inference |
+| **CrossAttention** | Multi-modal | Vision-language models, encoder-decoder |
+| **NeighborhoodAttention** | Graph | Local graph neighborhoods, message passing |
+| **HierarchicalAttention** | Structure | Document hierarchies, multi-level attention |
+
+#### Hyperbolic Math Functions
+
+For working with hyperbolic embeddings (Poincaré ball model):
+
+| Function | Description | Use Case |
+|----------|-------------|----------|
+| `expMap(v, c)` | Tangent space → Poincaré ball | Embedding initialization |
+| `logMap(p, c)` | Poincaré ball → Tangent space | Gradient computation |
+| `mobiusAddition(x, y, c)` | Hyperbolic vector addition | Feature aggregation |
+| `poincareDistance(x, y, c)` | Hyperbolic distance metric | Similarity computation |
+| `projectToPoincareBall(p, c)` | Project to valid ball region | Numerical stability |
+
+#### Async & Batch Operations
+
+| Operation | Description | Performance |
+|-----------|-------------|-------------|
+| `asyncBatchCompute()` | Parallel batch processing | 3-5x speedup |
+| `streamingAttention()` | Chunk-based streaming | Constant memory |
+| `HardNegativeMiner` | Contrastive learning | Semi-hard/hard mining |
+| `AttentionCache` | KV-cache for inference | 10x faster generation |
+
+```bash
+# Install attention module
+npm install @ruvector/attention
+
+# CLI commands
+npx ruvector attention list                    # List all 39 mechanisms
+npx ruvector attention info flash              # Details on FlashAttention
+npx ruvector attention benchmark               # Performance comparison
+npx ruvector attention compute -t dot -d 128   # Run attention computation
+npx ruvector attention hyperbolic -a distance -v "[0.1,0.2]" -b "[0.3,0.4]"
+```
+
+```javascript
+// JavaScript API
+const { FlashAttention, HyperbolicAttention, poincareDistance } = require('@ruvector/attention');
+
+// Flash attention for long sequences
+const flash = new FlashAttention(512, 64);  // dim=512, block_size=64
+const output = flash.compute(query, keys, values);
+
+// Hyperbolic attention for hierarchical data
+const hyper = new HyperbolicAttention(256, 1.0);  // dim=256, curvature=1.0
+const result = hyper.compute(query, keys, values);
+
+// Hyperbolic distance
+const dist = poincareDistance(new Float32Array([0.1, 0.2]), new Float32Array([0.3, 0.4]), 1.0);
+```
 
 ### Deployment
 
@@ -329,6 +329,13 @@ All crates are published to [crates.io](https://crates.io) under the `ruvector-*
 | [ruvector-gnn-node](./crates/ruvector-gnn-node) | Node.js bindings for GNN inference | [![crates.io](https://img.shields.io/crates/v/ruvector-gnn-node.svg)](https://crates.io/crates/ruvector-gnn-node) |
 | [ruvector-gnn-wasm](./crates/ruvector-gnn-wasm) | WASM bindings for browser GNN | [![crates.io](https://img.shields.io/crates/v/ruvector-gnn-wasm.svg)](https://crates.io/crates/ruvector-gnn-wasm) |
 
+### Attention Mechanisms
+
+| Crate | Description | crates.io |
+|-------|-------------|-----------|
+| [ruvector-attention](./crates/ruvector-attention) | 39 attention mechanisms (Flash, Hyperbolic, MoE, Graph) | [![crates.io](https://img.shields.io/crates/v/ruvector-attention.svg)](https://crates.io/crates/ruvector-attention) |
+| [ruvector-attention-wasm](./crates/ruvector-attention-wasm) | WASM bindings for browser attention | [![crates.io](https://img.shields.io/crates/v/ruvector-attention-wasm.svg)](https://crates.io/crates/ruvector-attention-wasm) |
+
 ### Distributed Systems
 
 | Crate | Description | crates.io |
@@ -354,6 +361,64 @@ All crates are published to [crates.io](https://crates.io) under the `ruvector-*
 | [ruvector-router-ffi](./crates/ruvector-router-ffi) | FFI bindings for other languages | [![crates.io](https://img.shields.io/crates/v/ruvector-router-ffi.svg)](https://crates.io/crates/ruvector-router-ffi) |
 | [ruvector-router-wasm](./crates/ruvector-router-wasm) | WASM bindings for browser routing | [![crates.io](https://img.shields.io/crates/v/ruvector-router-wasm.svg)](https://crates.io/crates/ruvector-router-wasm) |
 
+### Scientific OCR (SciPix)
+
+| Crate | Description | crates.io |
+|-------|-------------|-----------|
+| [ruvector-scipix](./examples/scipix) | OCR engine for scientific documents, math equations → LaTeX/MathML | [![crates.io](https://img.shields.io/crates/v/ruvector-scipix.svg)](https://crates.io/crates/ruvector-scipix) |
+
+**SciPix** extracts text and mathematical equations from images, converting them to LaTeX, MathML, or plain text. Features GPU-accelerated ONNX inference, SIMD-optimized preprocessing, REST API server, CLI tool, and MCP integration for AI assistants.
+
+```bash
+# Install
+cargo add ruvector-scipix
+
+# CLI usage
+scipix-cli ocr --input equation.png --format latex
+scipix-cli serve --port 3000
+
+# MCP server for Claude/AI assistants
+scipix-cli mcp
+claude mcp add scipix -- scipix-cli mcp
+```
+
+### ONNX Embeddings
+
+| Example | Description | Path |
+|---------|-------------|------|
+| [ruvector-onnx-embeddings](./examples/onnx-embeddings) | Production-ready ONNX embedding generation in pure Rust | `examples/onnx-embeddings` |
+
+**ONNX Embeddings** provides native embedding generation using ONNX Runtime — no Python required. Supports 8+ pretrained models (all-MiniLM, BGE, E5, GTE), multiple pooling strategies, GPU acceleration (CUDA, TensorRT, CoreML, WebGPU), and direct RuVector index integration for RAG pipelines.
+
+```rust
+use ruvector_onnx_embeddings::{Embedder, PretrainedModel};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Create embedder with default model (all-MiniLM-L6-v2)
+    let mut embedder = Embedder::default_model().await?;
+
+    // Generate embedding (384 dimensions)
+    let embedding = embedder.embed_one("Hello, world!")?;
+
+    // Compute semantic similarity
+    let sim = embedder.similarity(
+        "I love programming in Rust",
+        "Rust is my favorite language"
+    )?;
+    println!("Similarity: {:.4}", sim); // ~0.85
+
+    Ok(())
+}
+```
+
+**Supported Models:**
+| Model | Dimension | Speed | Best For |
+|-------|-----------|-------|----------|
+| `AllMiniLmL6V2` | 384 | Fast | General purpose (default) |
+| `BgeSmallEnV15` | 384 | Fast | Search & retrieval |
+| `AllMpnetBaseV2` | 768 | Accurate | Production RAG |
+
 ### Bindings & Tools
 
 | Crate | Description | crates.io |
@@ -376,22 +441,37 @@ All crates are published to [crates.io](https://crates.io) under the `ruvector-*
 | [@ruvector/tiny-dancer](https://www.npmjs.com/package/@ruvector/tiny-dancer) | FastGRNN neural inference for AI agent routing | [![npm](https://img.shields.io/npm/v/@ruvector/tiny-dancer.svg)](https://www.npmjs.com/package/@ruvector/tiny-dancer) |
 | [@ruvector/router](https://www.npmjs.com/package/@ruvector/router) | Semantic router with HNSW vector search | [![npm](https://img.shields.io/npm/v/@ruvector/router.svg)](https://www.npmjs.com/package/@ruvector/router) |
 | [@ruvector/agentic-synth](https://www.npmjs.com/package/@ruvector/agentic-synth) | Synthetic data generator for AI/ML | [![npm](https://img.shields.io/npm/v/@ruvector/agentic-synth.svg)](https://www.npmjs.com/package/@ruvector/agentic-synth) |
+| [@ruvector/attention](https://www.npmjs.com/package/@ruvector/attention) | 39 attention mechanisms for transformers & GNNs | [![npm](https://img.shields.io/npm/v/@ruvector/attention.svg)](https://www.npmjs.com/package/@ruvector/attention) |
 
 **Platform-specific native bindings** (auto-detected):
 - `@ruvector/node-linux-x64-gnu`, `@ruvector/node-linux-arm64-gnu`, `@ruvector/node-darwin-x64`, `@ruvector/node-darwin-arm64`, `@ruvector/node-win32-x64-msvc`
 - `@ruvector/gnn-linux-x64-gnu`, `@ruvector/gnn-linux-arm64-gnu`, `@ruvector/gnn-darwin-x64`, `@ruvector/gnn-darwin-arm64`, `@ruvector/gnn-win32-x64-msvc`
 - `@ruvector/tiny-dancer-linux-x64-gnu`, `@ruvector/tiny-dancer-linux-arm64-gnu`, `@ruvector/tiny-dancer-darwin-x64`, `@ruvector/tiny-dancer-darwin-arm64`, `@ruvector/tiny-dancer-win32-x64-msvc`
 - `@ruvector/router-linux-x64-gnu`, `@ruvector/router-linux-arm64-gnu`, `@ruvector/router-darwin-x64`, `@ruvector/router-darwin-arm64`, `@ruvector/router-win32-x64-msvc`
+- `@ruvector/attention-linux-x64-gnu`, `@ruvector/attention-linux-arm64-gnu`, `@ruvector/attention-darwin-x64`, `@ruvector/attention-darwin-arm64`, `@ruvector/attention-win32-x64-msvc`
 
-#### 🚧 Coming Soon
+#### 🔧 Ready to Publish (Crates Built)
+
+These packages have Rust crates ready and can be published on request:
+
+| Package | Description | Rust Crate | Status |
+|---------|-------------|------------|--------|
+| @ruvector/wasm | WASM fallback for core vector DB | `ruvector-wasm` | ✅ Built |
+| @ruvector/gnn-wasm | WASM fallback for GNN layers | `ruvector-gnn-wasm` | ✅ Built |
+| @ruvector/graph-wasm | WASM fallback for graph DB | `ruvector-graph-wasm` | ✅ Built |
+| @ruvector/attention-wasm | WASM fallback for attention | `ruvector-attention-wasm` | ✅ Built |
+| @ruvector/tiny-dancer-wasm | WASM fallback for AI routing | `ruvector-tiny-dancer-wasm` | ✅ Built |
+| @ruvector/router-wasm | WASM fallback for semantic router | `ruvector-router-wasm` | ✅ Built |
+| @ruvector/cluster | Distributed clustering & sharding | `ruvector-cluster` | ✅ Built |
+| @ruvector/server | HTTP/gRPC server mode | `ruvector-server` | ✅ Built |
+
+#### 🚧 Planned
 
 | Package | Description | Status |
 |---------|-------------|--------|
-| @ruvector/wasm | WASM fallback for core vector DB | Crate ready |
-| @ruvector/gnn-wasm | WASM fallback for GNN | Crate ready |
-| @ruvector/graph-wasm | WASM fallback for graph DB | Crate ready |
-| @ruvector/cluster | Distributed clustering | Crate ready |
-| @ruvector/server | HTTP/gRPC server mode | Crate ready |
+| @ruvector/raft | Raft consensus for distributed ops | Crate ready |
+| @ruvector/replication | Multi-master replication | Crate ready |
+| @ruvector/scipix | Scientific OCR (LaTeX/MathML) | Crate ready |
 
 See [GitHub Issue #20](https://github.com/ruvnet/ruvector/issues/20) for multi-platform npm package roadmap.
 
@@ -404,6 +484,78 @@ npm install @ruvector/core @ruvector/gnn @ruvector/graph-node
 
 # List all available packages
 npx ruvector install
+```
+
+
+```javascript
+const ruvector = require('ruvector');
+
+// Vector search
+const db = new ruvector.VectorDB(128);
+db.insert('doc1', embedding1);
+const results = db.search(queryEmbedding, 10);
+
+// Graph queries (Cypher)
+db.execute("CREATE (a:Person {name: 'Alice'})-[:KNOWS]->(b:Person {name: 'Bob'})");
+db.execute("MATCH (p:Person)-[:KNOWS]->(friend) RETURN friend.name");
+
+// GNN-enhanced search
+const layer = new ruvector.GNNLayer(128, 256, 4);
+const enhanced = layer.forward(query, neighbors, weights);
+
+// Compression (2-32x memory savings)
+const compressed = ruvector.compress(embedding, 0.3);
+
+// Tiny Dancer: AI agent routing
+const router = new ruvector.Router();
+const decision = router.route(candidates, { optimize: 'cost' });
+```
+
+### Rust
+
+```bash
+cargo add ruvector-graph ruvector-gnn
+```
+
+```rust
+use ruvector_graph::{GraphDB, NodeBuilder};
+use ruvector_gnn::{RuvectorLayer, differentiable_search};
+
+let db = GraphDB::new();
+
+let doc = NodeBuilder::new("doc1")
+    .label("Document")
+    .property("embedding", vec![0.1, 0.2, 0.3])
+    .build();
+db.create_node(doc)?;
+
+// GNN layer
+let layer = RuvectorLayer::new(128, 256, 4, 0.1);
+let enhanced = layer.forward(&query, &neighbors, &weights);
+```
+
+```rust
+use ruvector_raft::{RaftNode, RaftNodeConfig};
+use ruvector_cluster::{ClusterManager, ConsistentHashRing};
+use ruvector_replication::{SyncManager, SyncMode};
+
+// Configure a 5-node Raft cluster
+let config = RaftNodeConfig {
+    node_id: "node-1".into(),
+    cluster_members: vec!["node-1", "node-2", "node-3", "node-4", "node-5"]
+        .into_iter().map(Into::into).collect(),
+    election_timeout_min: 150,  // ms
+    election_timeout_max: 300,  // ms
+    heartbeat_interval: 50,     // ms
+};
+let raft = RaftNode::new(config);
+
+// Auto-sharding with consistent hashing (150 virtual nodes per real node)
+let ring = ConsistentHashRing::new(64, 3); // 64 shards, replication factor 3
+let shard = ring.get_shard("my-vector-key");
+
+// Multi-master replication with conflict resolution
+let sync = SyncManager::new(SyncMode::SemiSync { min_replicas: 2 });
 ```
 
 ## Project Structure

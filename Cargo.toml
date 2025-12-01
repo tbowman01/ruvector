@@ -26,12 +26,16 @@ members = [
     "crates/ruvector-gnn",
     "crates/ruvector-gnn-node",
     "crates/ruvector-gnn-wasm",
+    "crates/ruvector-attention",
+    "crates/ruvector-attention-wasm",
+    "crates/ruvector-attention-node",
     "examples/refrag-pipeline",
+    "examples/scipix",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.19"
 edition = "2021"
 rust-version = "1.77"
 license = "MIT"

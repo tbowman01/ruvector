@@ -89,11 +89,29 @@ function loadNativeBinding() {
 // Load the native module
 const nativeBinding = loadNativeBinding();
 
+// Try to load optional attention module
+let attention = null;
+try {
+  attention = require('@ruvector/attention');
+} catch {
+  // Attention module not installed - this is optional
+}
+
 // Export everything from the native binding
 module.exports = nativeBinding;
+
+// Add VectorDB alias (native exports as VectorDb)
+if (nativeBinding.VectorDb && !nativeBinding.VectorDB) {
+  module.exports.VectorDB = nativeBinding.VectorDb;
+}
 
 // Also export as default
 module.exports.default = nativeBinding;
 
 // Re-export DistanceMetric
 module.exports.DistanceMetric = DistanceMetric;
+
+// Export attention if available
+if (attention) {
+  module.exports.attention = attention;
+}

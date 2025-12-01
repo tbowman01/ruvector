@@ -371,6 +371,17 @@ export const hello = nativeBinding.hello;
 export const getMetrics = nativeBinding.getMetrics;
 export const getHealth = nativeBinding.getHealth;
 
+// Try to load optional attention module
+let attention: any = null;
+try {
+  attention = require('@ruvector/attention');
+} catch {
+  // Attention module not installed - this is optional
+}
+
+// Export attention if available
+export { attention };
+
 // Default export
 export default {
   VectorDB,
@@ -379,5 +390,7 @@ export default {
   hello,
   getMetrics,
   getHealth,
-  DistanceMetric
+  DistanceMetric,
+  // Include attention if available
+  ...(attention ? { attention } : {})
 };

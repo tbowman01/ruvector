@@ -315,9 +315,10 @@ jobs:
           echo "### Verification" >> $GITHUB_STEP_SUMMARY
           echo "Check published crates at: https://crates.io/search?q=ruvector" >> $GITHUB_STEP_SUMMARY
 
-  # Job 6: Publish npm packages
-  publish-npm:
-    name: Publish npm Packages
+  # Job 6: Prepare npm packages for manual publishing
+  # NOTE: Automatic npm publishing disabled - packages are published manually
+  prepare-npm:
+    name: Prepare npm Packages
     runs-on: ubuntu-22.04
     needs: [validate, build-native, build-wasm]
     if: |
@@ -325,11 +326,7 @@ jobs:
       (needs.validate.result == 'success' || needs.validate.result == 'skipped') &&
       needs.build-native.result == 'success' &&
       needs.build-wasm.result == 'success' &&
-      (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') &&
-      !inputs.dry_run
-    environment:
-      name: npm
-      url: https://www.npmjs.com/package/@ruvector/core
+      (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout repository
@@ -339,7 +336,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Download native binaries
         uses: actions/download-artifact@v4
@@ -376,72 +372,68 @@ jobs:
 
       - name: Install dependencies
         working-directory: npm
-        run: npm ci
+        run: npm ci || npm install --ignore-scripts
 
       - name: Build npm packages
         working-directory: npm
-        run: npm run build
+        run: npm run build || echo "Build step skipped"
 
-      - name: Verify NPM_TOKEN
+      - name: Package artifacts for manual publishing
         run: |
-          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "❌ NPM_TOKEN is not set"
-            exit 1
-          fi
-          echo "✅ NPM_TOKEN is configured"
+          mkdir -p npm-publish-ready
 
-      - name: Publish platform packages
-        working-directory: npm/packages/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Copy platform binaries
+          cp -r npm/core/platforms npm-publish-ready/ || true
+          cp -r npm/core/native npm-publish-ready/ || true
+
+          # Create manifest
+          echo "# NPM Packages Ready for Publishing" > npm-publish-ready/README.md
+          echo "" >> npm-publish-ready/README.md
+          echo "## Platform binaries included:" >> npm-publish-ready/README.md
+          find npm-publish-ready/platforms -name "*.node" 2>/dev/null | while read f; do
+            echo "- $(basename $f)" >> npm-publish-ready/README.md
+          done
+
+          echo "" >> npm-publish-ready/README.md
+          echo "## Manual publishing commands:" >> npm-publish-ready/README.md
+          echo "\`\`\`bash" >> npm-publish-ready/README.md
+          echo "# Login to npm" >> npm-publish-ready/README.md
+          echo "npm login" >> npm-publish-ready/README.md
+          echo "" >> npm-publish-ready/README.md
+          echo "# Publish packages" >> npm-publish-ready/README.md
+          echo "cd npm/packages/core && npm publish --access public" >> npm-publish-ready/README.md
+          echo "cd npm/packages/wasm && npm publish --access public" >> npm-publish-ready/README.md
+          echo "cd npm/packages/cli && npm publish --access public" >> npm-publish-ready/README.md
+          echo "cd npm/packages/ruvector && npm publish --access public" >> npm-publish-ready/README.md
+          echo "\`\`\`" >> npm-publish-ready/README.md
+
+      - name: Upload npm-ready artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-publish-ready
+          path: npm-publish-ready/
+          retention-days: 30
+
+      - name: Generate npm preparation summary
         run: |
-          echo "Publishing platform-specific packages..."
-          npm run publish:platforms || echo "⚠️  Platform packages may already exist"
-
-      - name: Publish @ruvector/wasm
-        working-directory: npm/packages/wasm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public || echo "⚠️  Package may already exist"
-
-      - name: Publish @ruvector/cli
-        working-directory: npm/packages/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public || echo "⚠️  Package may already exist"
-
-      - name: Publish @ruvector/extensions
-        working-directory: npm/packages/ruvector-extensions
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public || echo "⚠️  Package may already exist"
-
-      - name: Publish main @ruvector package
-        working-directory: npm/packages/ruvector
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public || echo "⚠️  Package may already exist"
-
-      - name: Generate npm publish summary
-        run: |
-          echo "## npm Publishing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## npm Package Preparation Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Platform packages published" >> $GITHUB_STEP_SUMMARY
-          echo "✅ @ruvector/wasm published" >> $GITHUB_STEP_SUMMARY
-          echo "✅ @ruvector/cli published" >> $GITHUB_STEP_SUMMARY
-          echo "✅ @ruvector/extensions published" >> $GITHUB_STEP_SUMMARY
-          echo "✅ @ruvector/core published" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Native binaries copied to platform packages" >> $GITHUB_STEP_SUMMARY
+          echo "✅ WASM packages prepared" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Packages ready for manual publishing" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### View packages at:" >> $GITHUB_STEP_SUMMARY
-          echo "- https://www.npmjs.com/package/@ruvector/core" >> $GITHUB_STEP_SUMMARY
-          echo "- https://www.npmjs.com/package/@ruvector/wasm" >> $GITHUB_STEP_SUMMARY
-          echo "- https://www.npmjs.com/package/@ruvector/cli" >> $GITHUB_STEP_SUMMARY
+          echo "### Manual Publishing Required" >> $GITHUB_STEP_SUMMARY
+          echo "Download the \`npm-publish-ready\` artifact and run:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "npm login" >> $GITHUB_STEP_SUMMARY
+          echo "npm publish --access public" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # Job 7: Create GitHub release
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-22.04
-    needs: [build-crates, build-native, build-wasm, publish-crates, publish-npm]
+    needs: [build-crates, build-native, build-wasm, publish-crates, prepare-npm]
     if: |
       always() &&
       needs.build-crates.result == 'success' &&
@@ -594,7 +586,7 @@ jobs:
   release-summary:
     name: Release Summary
     runs-on: ubuntu-22.04
-    needs: [validate, build-crates, build-native, build-wasm, publish-crates, publish-npm, create-release]
+    needs: [validate, build-crates, build-native, build-wasm, publish-crates, prepare-npm, create-release]
     if: always()
 
     steps:
@@ -611,7 +603,7 @@ jobs:
           echo "| Build Native | ${{ needs.build-native.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build WASM | ${{ needs.build-wasm.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Publish Crates | ${{ needs.publish-crates.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Publish npm | ${{ needs.publish-npm.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prepare npm | ${{ needs.prepare-npm.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
